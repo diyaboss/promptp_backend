@@ -11,6 +11,12 @@ leaderboard_clients = []
 class LeaderboardService:
     @staticmethod
     def get_leaderboard(db: Session, round_id: str) -> List[LeaderboardEntry]:
+        """
+        Retrieves the ranked leaderboard for a specific round.
+        
+        Joins the Score, Submission, and User tables to produce a sorted list
+        of scores, descending by the final score.
+        """
         # Query scores for the round, ranked by final_score desc
         results = (
             db.query(Score, User, Submission)
@@ -35,11 +41,22 @@ class LeaderboardService:
 
     @staticmethod
     async def notify_update():
+        """
+        Pushes an update notification to all connected SSE clients.
+        
+        Called automatically whenever a new submission is scored.
+        """
         for q in leaderboard_clients:
             await q.put("update")
 
     @staticmethod
     async def stream_leaderboard():
+        """
+        Async generator that manages a Server-Sent Events (SSE) stream for a client.
+        
+        Yields events continuously. It starts with an initial ping to establish connection,
+        and then yields an "update" event every time `notify_update` is called.
+        """
         q = asyncio.Queue()
         leaderboard_clients.append(q)
         try:

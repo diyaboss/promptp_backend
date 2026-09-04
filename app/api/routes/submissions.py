@@ -16,6 +16,13 @@ async def create_submission(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Submits a completed generation as the user's final entry for a round.
+    
+    This enforces the rule that a user can only have one final submission per round.
+    Once submitted, the image is automatically scored against the target image using
+    the configured scoring service, and the leaderboard SSE stream is notified of the update.
+    """
     generation = db.query(Generation).filter(Generation.id == sub_in.generation_id).first()
     if not generation:
         raise HTTPException(status_code=404, detail="Generation not found")

@@ -40,6 +40,12 @@ def _get_round_participant_out(db: Session, round_obj: Round, current_user: User
 
 @router.get("/current", response_model=RoundParticipantOut)
 def get_current_round(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Fetches the currently active round.
+    
+    This endpoint constructs a participant-safe view of the round, including their
+    specific attempt limits and hiding sensitive target details (like the reference prompt and seed).
+    """
     current_round = db.query(Round).filter(Round.status == RoundStatus.ACTIVE).first()
     if not current_round:
         raise HTTPException(status_code=404, detail="No active round found")
@@ -48,6 +54,11 @@ def get_current_round(db: Session = Depends(get_db), current_user: User = Depend
 
 @router.get("/{round_id}", response_model=RoundParticipantOut)
 def get_round(round_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Fetches details for a specific round by ID.
+    
+    Like the `/current` endpoint, this returns a participant-safe view.
+    """
     round_obj = db.query(Round).filter(Round.id == round_id).first()
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")

@@ -16,6 +16,18 @@ async def create_generation(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Submits a prompt to generate an image for a specific round.
+    
+    This endpoint enforces Several constraints:
+    - The round must be active and within its start/end time.
+    - The user must have attempts remaining for this round.
+    - The generation configuration (model, seed, dimensions) is strictly controlled
+      by the round's Target settings to prevent cheating.
+    
+    If successful, it delegates to the GenerationService to create the image (or mock it)
+    and returns the generation details including the image path.
+    """
     round_obj = db.query(Round).filter(Round.id == gen_in.round_id).first()
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")
@@ -84,6 +96,12 @@ def get_generations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves the generation history for the authenticated user.
+    
+    If `round_id` is provided as a query parameter, it filters the history
+    to only show generations from that specific round. Sorted by newest first.
+    """
     query = db.query(Generation).filter(Generation.user_id == current_user.id)
     if round_id:
         query = query.filter(Generation.round_id == round_id)

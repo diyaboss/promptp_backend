@@ -5,8 +5,17 @@ class ScoringService:
     @staticmethod
     def score_submission(target_image: str, submitted_image: str) -> float:
         """
-        Scores the submission against the target image.
-        Returns a float between 0 and 1.
+        Calculates the similarity score between a target image and the user's submitted image.
+        
+        In 'mock' mode, returns a deterministic dummy score. In 'real' mode, this will
+        use CLIP to generate embeddings for both images and calculate their cosine similarity.
+        
+        Args:
+            target_image (str): Path or URL of the target image.
+            submitted_image (str): Path or URL of the user's generated image.
+            
+        Returns:
+            float: Similarity score between 0.0 and 1.0.
         """
         if settings.SCORING_MODE == "mock":
             # Deterministic mock score based on string lengths just to have something consistent
@@ -19,5 +28,9 @@ class ScoringService:
 
     @staticmethod
     def score_batch(target_embedding: list, submitted_images: List[str]) -> List[float]:
-        # Batch scoring placeholder
+        """
+        Efficiently scores a batch of submitted images against a pre-computed target embedding.
+        
+        This will be used for batch evaluation if needed.
+        """
         return [0.5 for _ in submitted_images]

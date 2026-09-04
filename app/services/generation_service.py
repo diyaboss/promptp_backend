@@ -8,7 +8,21 @@ class GenerationService:
     @staticmethod
     async def generate_image(prompt: str, seed: int, model: str, width: int, height: int) -> Tuple[str, int]:
         """
-        Returns: (image_path, generation_time_ms)
+        Generates an image from a prompt using the specified model and seed.
+        
+        In 'mock' mode, this simulates network latency and generation time, returning
+        a placeholder image URL. In 'real' mode, this will interact with the external
+        inference API (e.g., RunPod or FLUX API).
+        
+        Args:
+            prompt (str): The user's prompt.
+            seed (int): The deterministic seed for the target image.
+            model (str): The model identifier.
+            width (int): Image width.
+            height (int): Image height.
+            
+        Returns:
+            Tuple[str, int]: A tuple containing the image path (URL) and generation time in milliseconds.
         """
         start_time = time.time()
         

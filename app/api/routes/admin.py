@@ -14,6 +14,13 @@ def create_round(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin_user)
 ):
+    """
+    Creates a new round in the database and automatically provisions a mock target for it.
+    
+    This endpoint is restricted to administrators. It sets up the round's timing,
+    attempt limits, and initial status. A mock target image and generation parameters
+    are linked to the round to simulate the real target uploading process.
+    """
     round_obj = Round(
         round_number=round_in.round_number,
         name=round_in.name,
@@ -45,6 +52,12 @@ def start_round(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin_user)
 ):
+    """
+    Manually starts a round by changing its status to ACTIVE.
+    
+    Once active, participants can view the round's target and begin submitting
+    generation requests. Restricted to administrators.
+    """
     round_obj = db.query(Round).filter(Round.id == round_id).first()
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")
@@ -59,6 +72,12 @@ def end_round(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin_user)
 ):
+    """
+    Manually ends a round by changing its status to ENDED.
+    
+    Once ended, participants can no longer generate images or make submissions
+    for this round. Restricted to administrators.
+    """
     round_obj = db.query(Round).filter(Round.id == round_id).first()
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")
