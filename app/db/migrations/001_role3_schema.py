@@ -130,6 +130,20 @@ def upgrade():
             ))
             print("[+] Added column: submissions.team_id")
 
+        # --- PostgreSQL enum migration for RoundStatus ---
+        if engine.dialect.name == "postgresql":
+            try:
+                for val in ["Draft", "Open", "Closed", "Scoring", "Review", "Published"]:
+                    conn.execute(text(f"ALTER TYPE roundstatus ADD VALUE IF NOT EXISTS '{val}'"))
+                conn.execute(text("""
+                    UPDATE rounds SET status = 'Draft' WHERE status::text IN ('DRAFT', 'READY');
+                    UPDATE rounds SET status = 'Open' WHERE status::text = 'ACTIVE';
+                    UPDATE rounds SET status = 'Closed' WHERE status::text = 'ENDED';
+                """))
+                print("[+] Migrated PostgreSQL roundstatus enum values")
+            except Exception as e:
+                print(f"[*] PostgreSQL enum migration note: {e}")
+
     print("[OK] Upgrade complete.")
 
 
