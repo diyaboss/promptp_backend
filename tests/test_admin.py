@@ -10,7 +10,7 @@ def test_create_round_admin(client):
             "start_time": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
             "end_time": (datetime.now(timezone.utc) + timedelta(minutes=55)).isoformat(),
             "attempt_limit": 5,
-            "status": "DRAFT"
+            "status": "Draft"
         }
     )
     assert response.status_code == 200
@@ -45,4 +45,4 @@ def test_start_round(client, db):
         headers={"Authorization": "Bearer mock-admin-token"}
     )
     assert start_res.status_code == 200
-    assert start_res.json()["status"] == "ACTIVE"
+    assert start_res.json()["status"] == "Open"

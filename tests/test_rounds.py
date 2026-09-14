@@ -23,7 +23,7 @@ def test_get_current_round(client):
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ACTIVE"
+    assert data["status"] == "Open"
     assert "target" in data
     # Ensure sensitive info is NOT exposed
     assert "reference_prompt" not in data.get("target", {})

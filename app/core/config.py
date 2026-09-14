@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     CLOUDFLARE_R2_BUCKET: Optional[str] = None
     
     GENERATION_MODEL: str = "flux-1-schnell"
+    GENERATION_LOCK_TIMEOUT_SECONDS: int = 120
+    MAX_PROMPT_LENGTH: int = 1000
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

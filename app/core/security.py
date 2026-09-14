@@ -28,6 +28,14 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
                 "registration_id": "REG-USER",
                 "role": "participant"
             }
+        elif token == "mock-user2-token":
+            return {
+                "id": "user-2",
+                "name": "Mock User 2",
+                "email": "user2@example.com",
+                "registration_id": "REG-USER2",
+                "role": "participant"
+            }
         raise HTTPException(status_code=401, detail="Invalid mock token")
         
     if not settings.SUPABASE_JWT_SECRET:

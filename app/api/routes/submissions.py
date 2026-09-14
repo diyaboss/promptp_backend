@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.db.database import get_db
-from app.db.models import User, Round, RoundStatus, Generation, GenerationStatus, Submission, Target, Score
+from app.db.models import User, Team, Round, RoundStatus, Generation, GenerationStatus, Submission, Target, Score
 from app.schemas.submission import SubmissionCreate, SubmissionOut
 from app.dependencies.auth import get_current_user
 from app.services.scoring_service import ScoringService
@@ -17,29 +17,37 @@ async def create_submission(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Submits a completed generation as the user's final entry for a round.
+    Submits a completed generation as the team's final entry for a round (legacy route).
     
-    This enforces the rule that a user can only have one final submission per round.
-    Once submitted, the image is automatically scored against the target image using
-    the configured scoring service, and the leaderboard SSE stream is notified of the update.
+    Enforces:
+    - User must belong to a team
+    - Generation must exist and be COMPLETE
+    - Generation must belong to the user's team
+    - Round must be Open
+    - Enforces team-scoped uniqueness: rejects duplicate submissions with 409 Conflict
     """
+    if not current_user.team_id:
+        raise HTTPException(status_code=403, detail="You must join a team first")
+
     generation = db.query(Generation).filter(Generation.id == sub_in.generation_id).first()
     if not generation:
         raise HTTPException(status_code=404, detail="Generation not found")
         
-    if generation.user_id != current_user.id:
+    if generation.team_id and generation.team_id != current_user.team_id:
+        raise HTTPException(status_code=403, detail="Generation does not belong to your team")
+    elif not generation.team_id and generation.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Generation does not belong to you")
         
     if generation.status != GenerationStatus.COMPLETE:
         raise HTTPException(status_code=400, detail="Generation is not complete")
         
     round_obj = db.query(Round).filter(Round.id == generation.round_id).first()
-    if not round_obj or round_obj.status != RoundStatus.ACTIVE:
-        raise HTTPException(status_code=400, detail="Round is not active")
+    if not round_obj or round_obj.status != RoundStatus.OPEN:
+        raise HTTPException(status_code=400, detail="Round is not open")
         
-    # Check if already submitted
+    # Check if team has already submitted for this round
     existing = db.query(Submission).filter(
-        Submission.user_id == current_user.id,
+        Submission.team_id == current_user.team_id,
         Submission.round_id == round_obj.id
     ).first()
     
@@ -48,6 +56,7 @@ async def create_submission(
         
     submission = Submission(
         user_id=current_user.id,
+        team_id=current_user.team_id,
         round_id=round_obj.id,
         generation_id=generation.id
     )

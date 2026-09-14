@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.db.models import User, Round, RoundStatus, Generation, Target, GenerationStatus
+from app.db.models import User, Team, Round, RoundStatus, Generation, Target, GenerationStatus
 from app.schemas.generation import GenerationCreate, GenerationOut
 from app.dependencies.auth import get_current_user
 from app.services.generation_service import GenerationService
@@ -17,78 +17,71 @@ async def create_generation(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Submits a prompt to generate an image for a specific round.
+    Submits a prompt to generate an image for a specific round (legacy route).
     
-    This endpoint enforces Several constraints:
-    - The round must be active and within its start/end time.
-    - The user must have attempts remaining for this round.
-    - The generation configuration (model, seed, dimensions) is strictly controlled
-      by the round's Target settings to prevent cheating.
-    
-    If successful, it delegates to the GenerationService to create the image (or mock it)
-    and returns the generation details including the image path.
+    Fully conforms to team-based rules:
+    - User must belong to a team
+    - Round must be Open and within start/end times
+    - Team prompting permissions are enforced (leader-only or toggled)
+    - Target must belong to the round
+    - Atomic team quota and cooldown are enforced
+    - Single concurrent generation per team is enforced
+    - Full generation pipeline runs with lock released in finally block
     """
+    if not current_user.team_id:
+        raise HTTPException(status_code=403, detail="You must join a team first")
+        
+    team = db.query(Team).filter(Team.id == current_user.team_id).first()
+    if not team:
+        raise HTTPException(status_code=403, detail="Your team was not found. Please contact an admin.")
+
     round_obj = db.query(Round).filter(Round.id == gen_in.round_id).first()
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")
         
-    if round_obj.status != RoundStatus.ACTIVE:
-        raise HTTPException(status_code=400, detail="Round is not active")
+    if round_obj.status != RoundStatus.OPEN:
+        raise HTTPException(status_code=400, detail="Round is not open")
         
     now = datetime.now(timezone.utc)
     if round_obj.start_time and now < round_obj.start_time.replace(tzinfo=timezone.utc):
         raise HTTPException(status_code=400, detail="Round has not started")
     if round_obj.end_time and now > round_obj.end_time.replace(tzinfo=timezone.utc):
         raise HTTPException(status_code=400, detail="Round has ended")
-        
-    attempts_used = db.query(Generation).filter(
-        Generation.round_id == round_obj.id,
-        Generation.user_id == current_user.id
-    ).count()
-    
-    if attempts_used >= round_obj.attempt_limit:
-        raise HTTPException(status_code=429, detail="Attempt limit reached")
-        
+
+    # 1. Enforce team prompting permissions
+    GenerationService.check_prompting_permission(current_user, team, round_obj)
+
+    # 2. Validate target belongs to the round
     target = db.query(Target).filter(Target.round_id == round_obj.id).first()
     if not target:
         raise HTTPException(status_code=500, detail="Target not configured for this round")
-        
-    # Create generation record
-    db_gen = Generation(
-        user_id=current_user.id,
+
+    # 3. Atomic team quota + cooldown check
+    GenerationService.acquire_prompt_slot(
+        db,
+        team_id=team.id,
         round_id=round_obj.id,
-        prompt=gen_in.prompt,
-        seed=target.seed,  # deterministic/controlled by target
-        model=target.model,
-        status=GenerationStatus.PROCESSING
+        attempt_limit=round_obj.attempt_limit,
+        cooldown_seconds=round_obj.cooldown_seconds,
     )
-    db.add(db_gen)
-    db.commit()
-    db.refresh(db_gen)
-    
-    try:
-        # Mock/Actual generation
-        image_path, gen_time = await GenerationService.generate_image(
-            prompt=gen_in.prompt,
-            seed=target.seed,
-            model=target.model,
-            width=target.width,
-            height=target.height
-        )
-        
-        db_gen.image_path = image_path
-        db_gen.generation_time_ms = gen_time
-        db_gen.status = GenerationStatus.COMPLETE
-        db.commit()
-        db.refresh(db_gen)
-        
-    except Exception as e:
-        db_gen.status = GenerationStatus.FAILED
-        db.commit()
-        db.refresh(db_gen)
-        raise HTTPException(status_code=500, detail=str(e))
-        
-    return db_gen
+
+    # 4. Acquire generation lock (one concurrent generation per team)
+    GenerationService.acquire_generation_lock(
+        db, team_id=team.id, round_id=round_obj.id
+    )
+
+    # 5. Run generation pipeline (releases lock in finally block)
+    generation = await GenerationService.run_generation_pipeline(
+        db=db,
+        user=current_user,
+        team=team,
+        round_obj=round_obj,
+        target=target,
+        prompt=gen_in.prompt,
+        idempotency_key=None,
+    )
+
+    return generation
 
 @router.get("", response_model=List[GenerationOut])
 def get_generations(
@@ -97,12 +90,17 @@ def get_generations(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Retrieves the generation history for the authenticated user.
+    Retrieves the generation history for the authenticated user / team.
     
     If `round_id` is provided as a query parameter, it filters the history
     to only show generations from that specific round. Sorted by newest first.
     """
-    query = db.query(Generation).filter(Generation.user_id == current_user.id)
+    query = db.query(Generation)
+    if current_user.team_id:
+        query = query.filter(Generation.team_id == current_user.team_id)
+    else:
+        query = query.filter(Generation.user_id == current_user.id)
+
     if round_id:
         query = query.filter(Generation.round_id == round_id)
         

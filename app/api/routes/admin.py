@@ -27,6 +27,8 @@ def create_round(
         start_time=round_in.start_time,
         end_time=round_in.end_time,
         attempt_limit=round_in.attempt_limit,
+        cooldown_seconds=round_in.cooldown_seconds,
+        allow_participant_prompts=round_in.allow_participant_prompts,
         status=round_in.status
     )
     db.add(round_obj)
@@ -53,16 +55,16 @@ def start_round(
     admin: User = Depends(get_current_admin_user)
 ):
     """
-    Manually starts a round by changing its status to ACTIVE.
+    Manually starts a round by changing its status to Open.
     
-    Once active, participants can view the round's target and begin submitting
+    Once open, participants can view the round's target and begin submitting
     generation requests. Restricted to administrators.
     """
     round_obj = db.query(Round).filter(Round.id == round_id).first()
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")
         
-    round_obj.status = RoundStatus.ACTIVE
+    round_obj.status = RoundStatus.OPEN
     db.commit()
     return {"message": "Round started", "status": round_obj.status}
 
@@ -73,15 +75,15 @@ def end_round(
     admin: User = Depends(get_current_admin_user)
 ):
     """
-    Manually ends a round by changing its status to ENDED.
+    Manually ends a round by changing its status to Closed.
     
-    Once ended, participants can no longer generate images or make submissions
+    Once closed, participants can no longer generate images or make submissions
     for this round. Restricted to administrators.
     """
     round_obj = db.query(Round).filter(Round.id == round_id).first()
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")
         
-    round_obj.status = RoundStatus.ENDED
+    round_obj.status = RoundStatus.CLOSED
     db.commit()
     return {"message": "Round ended", "status": round_obj.status}
